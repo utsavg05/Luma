@@ -1,13 +1,22 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable } from "react-native";
+import { useLocalSearchParams, router } from "expo-router";
+import { useTaskStore } from "@/src/store/task.store";
 
 // Timer Display Component
-function TimerDisplay({ minutes, seconds }: { minutes: number; seconds: number }) {
-  const formattedTime = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+function TimerDisplay({
+  minutes,
+  seconds,
+}: {
+  minutes: number;
+  seconds: number;
+}) {
+  const formattedTime = `${String(minutes).padStart(2, "0")}:${String(
+    seconds
+  ).padStart(2, "0")}`;
 
   return (
     <View className="items-center justify-center">
-      {/* Circular timer background */}
       <View className="h-60 w-60 items-center justify-center rounded-full border-8 border-luma-accent-purple bg-white">
         <Text className="text-6xl font-bold text-luma-text-dark">
           {formattedTime}
@@ -24,10 +33,13 @@ interface ActionButtonsProps {
   onEndSession: () => void;
 }
 
-function ActionButtons({ isRunning, onStartPause, onEndSession }: ActionButtonsProps) {
+function ActionButtons({
+  isRunning,
+  onStartPause,
+  onEndSession,
+}: ActionButtonsProps) {
   return (
     <View className="gap-4">
-      {/* Primary Button: Start / Pause */}
       <Pressable
         onPress={onStartPause}
         className="rounded-full bg-luma-accent-orange px-12 py-4"
@@ -37,7 +49,6 @@ function ActionButtons({ isRunning, onStartPause, onEndSession }: ActionButtonsP
         </Text>
       </Pressable>
 
-      {/* Secondary Button: End Session */}
       <Pressable
         onPress={onEndSession}
         className="rounded-full border-2 border-luma-text-medium bg-white px-12 py-4"
@@ -63,7 +74,9 @@ function HelperText() {
 function HeaderSection({ taskName }: { taskName: string }) {
   return (
     <View className="items-center">
-      <Text className="text-sm font-medium text-luma-text-medium">Focus Mode</Text>
+      <Text className="text-sm font-medium text-luma-text-medium">
+        Focus Mode
+      </Text>
       <Text className="mt-2 text-2xl font-semibold text-luma-text-dark">
         {taskName}
       </Text>
@@ -73,29 +86,76 @@ function HeaderSection({ taskName }: { taskName: string }) {
 
 // Main Focus Screen Component
 export default function FocusScreen() {
+//   const { taskName = "Focus Session", duration = "25" } =
+//     useLocalSearchParams();
+
+const { taskId, duration = "25" } = useLocalSearchParams();
+    const { taskName  } = useLocalSearchParams();
+const completeSession = useTaskStore((s) => s.completeSession);
+
+
+  const totalMinutes = Number(duration);
+
   const [isRunning, setIsRunning] = useState(false);
-  const [minutes, setMinutes] = useState(25);
-  const [seconds, setSeconds] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(totalMinutes * 60);
+
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Core timer logic
+  useEffect(() => {
+    if (!isRunning) return;
+
+    intervalRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          setIsRunning(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isRunning]);
+
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
 
   const handleStartPause = () => {
-    setIsRunning(!isRunning);
-    // Placeholder for actual timer logic
-    console.log(isRunning ? "Paused" : "Started");
+    setIsRunning((prev) => !prev);
   };
 
   const handleEndSession = () => {
-    setIsRunning(false);
-    setMinutes(25);
-    setSeconds(0);
-    // Placeholder for navigation back
-    console.log("End session");
-  };
+  if (intervalRef.current) {
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+  }
+
+  completeSession({
+    taskId: String(taskId),
+    duration: totalMinutes,
+    completedAt: Date.now(),
+  });
+
+  setIsRunning(false);
+  router.back();
+};
+
 
   return (
     <View className="flex-1 bg-luma-bg px-6">
       {/* Top Section */}
       <View className="flex-1 items-center justify-start pt-12">
-        <HeaderSection taskName="Deep Work Session" />
+        <HeaderSection taskName={String(taskName)} />
       </View>
 
       {/* Main Timer Section */}
